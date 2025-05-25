@@ -42,64 +42,70 @@ while True:
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_detection.process(rgb_frame)
 
+    
     if results.detections:
-        for detection in results.detections:
-            bbox = detection.location_data.relative_bounding_box
-            h, w, _ = frame.shape
-            x = int(bbox.xmin * w)
-            y = int(bbox.ymin * h)
-            width = int(bbox.width * w)
-            height = int(bbox.height * h)
+        # Sort and take the largest face (most prominent one)
+        detections = sorted(results.detections, key=lambda d: d.location_data.relative_bounding_box.width * d.location_data.relative_bounding_box.height, reverse=True)
+        detection = detections[0]  # Pick the first (largest) detection
 
-            # Crop the face
-            face = frame[y:y+height, x:x+width]
-            if face.size == 0:
-                continue
+        bbox = detection.location_data.relative_bounding_box
+        h, w, _ = frame.shape
+        x = int(bbox.xmin * w)
+        y = int(bbox.ymin * h)
+        width = int(bbox.width * w)
+        height = int(bbox.height * h)
 
-            # Resize the face to 224x224
-            face_resized = cv2.resize(face, (224, 224))
-            temp_image_path = "temp_face.jpg"
-            cv2.imwrite(temp_image_path, face_resized)
+        # Crop the face region
+        face = frame[y:y + height, x:x + width]
+        if face.size == 0:
+            continue
 
-            # Debug: Show cropped face
-            cv2.imshow("Cropped Face", face_resized)
+        # Resize and save temporarily
+        face_resized = cv2.resize(face, (224, 224))
+        temp_image_path = "temp_face.jpg"
+        cv2.imwrite(temp_image_path, face_resized)
 
-            recognized = False
-            for name, image_path in known_faces.items():
-                try:
-                    result = DeepFace.verify(temp_image_path, image_path, enforce_detection=False, model_name="Facenet")
-                    print(f"Checking {name} - Verified: {result['verified']}, Distance: {result['distance']:.4f}")
+        # Debug window for cropped face
+        cv2.imshow("Cropped Face", face_resized)
 
-                    if result["verified"]:
-                        recognized = True
-                        if name not in marked_present:
-                            time_str = datetime.now().strftime("%H:%M:%S")
-                            with open(csv_path, "a", newline="") as f:
-                                writer = csv.writer(f)
-                                writer.writerow([name, time_str])
-                            marked_present.add(name)
-                            print(f"[INFO] Marked {name} present at {time_str}")
+        recognized = False
+        for name, image_path in known_faces.items():
+            if name in marked_present:
+                continue  # Skip already marked people
+
+            try:
+                result = DeepFace.verify(temp_image_path, image_path, enforce_detection=False, model_name="Facenet")
+                print(f"Checking {name} - Verified: {result['verified']}, Distance: {result['distance']:.4f}")
+
+                if result["verified"]:
+                    recognized = True
+                    time_str = datetime.now().strftime("%H:%M:%S")
+                    with open(csv_path, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([name, time_str])
+                    marked_present.add(name)
+                    print(f"[INFO] Marked {name} present at {time_str}")
                     cv2.putText(frame, f"{name} Present", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    
-                    # Display total people marked present count
-                    cv2.putText(frame, f"Total Present: {len(marked_present)}", (10, 30),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
                     break
-                except Exception as e:
-                    print(f"Error verifying {name}: {e}")
 
-            if not recognized:
-                cv2.putText(frame, "Unknown - Press S to Save", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            except Exception as e:
+                print(f"Error verifying {name}: {e}")
 
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('s'):
-                    name = input("Enter name for this new face: ")
-                    filename = os.path.join("faces", f"{name}.jpg")
-                    cv2.imwrite(filename, face_resized)
-                    known_faces = load_known_faces()  # Refresh known faces
-                    print(f"[INFO] {name}'s face saved.")
+        if not recognized:
+            cv2.putText(frame, "Unknown - Press S to Save", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('s'):
+                name = input("Enter name for this new face: ")
+                filename = os.path.join("faces", f"{name}.jpg")
+                cv2.imwrite(filename, face_resized)
+                known_faces = load_known_faces()
+                print(f"[INFO] {name}'s face saved.")
 
-    # Show the full frame
+    # Show the full video frame
+    cv2.putText(frame, f"Total Present: {len(marked_present)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
     cv2.imshow("Face Attendance", frame)
+
+    # Press 'q' to quit
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
