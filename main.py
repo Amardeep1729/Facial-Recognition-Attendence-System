@@ -70,8 +70,7 @@ while True:
 
         recognized = False
         for name, image_path in known_faces.items():
-            if name in marked_present:
-                continue  # Skip already marked people
+            
 
             try:
                 result = DeepFace.verify(temp_image_path, image_path, enforce_detection=False, model_name="Facenet")
@@ -79,12 +78,13 @@ while True:
 
                 if result["verified"]:
                     recognized = True
-                    time_str = datetime.now().strftime("%H:%M:%S")
-                    with open(csv_path, "a", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow([name, time_str])
-                    marked_present.add(name)
-                    print(f"[INFO] Marked {name} present at {time_str}")
+                    if name not in marked_present:
+                        time_str = datetime.now().strftime("%H:%M:%S")
+                        with open(csv_path, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow([name, time_str])
+                        marked_present.add(name)
+                        print(f"[INFO] Marked {name} present at {time_str}")
                     cv2.putText(frame, f"{name} Present", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     break
 
